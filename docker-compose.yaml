@@ -8,6 +8,7 @@ services:
       - "2181:2181"
     networks:
       - kafka-net
+
   kafka1:
     image: confluentinc/cp-kafka:7.0.1
     container_name: kafka1
@@ -76,6 +77,20 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS=kafka1:9092,kafka2:9094,kafka3:9096
       - KAFKA_CLUSTERS_0_NAME=kafka
       - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    networks:
+      - kafka-net
+
+  consumer:
+    build: .
+    command: python consumers.py
+    deploy:
+      replicas: 2
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:9092,kafka2:9094,kafka3:9096
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
     networks:
       - kafka-net
 
