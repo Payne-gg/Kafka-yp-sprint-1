@@ -1,0 +1,11 @@
+# Команда создания топика:
+docker exec kafka1 kafka-topics --create --topic python-topic --bootstrap-server kafka1:9092 --partitions 3 --replication-factor 2
+
+# Информация о топике:
+docker exec kafka1 kafka-topics --describe --topic python-topic --bootstrap-server kafka1:9092
+
+# Результат выполнения команды describe:
+Topic: python-topic	PartitionCount: 3	ReplicationFactor: 2	Configs: 
+	Topic: python-topic	Partition: 0	Leader: 1	Replicas: 1,2	Isr: 1,2
+	Topic: python-topic	Partition: 1	Leader: 2	Replicas: 2,3	Isr: 2,3
+	Topic: python-topic	Partition: 2	Leader: 3	Replicas: 3,1	Isr: 3,1 

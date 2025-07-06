@@ -23,16 +23,24 @@ class BaseConsumer:
         """
         self.topic = topic
         self.group_id = group_id
+        
+        # Добавляем задержку перед подключением
+        logger.info(f"Ожидание 10 секунд перед подключением консьюмера {group_id}...")
+        time.sleep(10)
+        
         try:
             self.consumer = KafkaConsumer(
                 topic,
                 bootstrap_servers=bootstrap_servers,
                 group_id=group_id,
                 auto_offset_reset='earliest',
-                enable_auto_commit=True,
+                enable_auto_commit=False,  # Отключаем автокоммит
                 max_poll_interval_ms=300000,  # 5 минут на обработку
                 session_timeout_ms=60000,     # 1 минута таймаут сессии
-                heartbeat_interval_ms=20000   # Heartbeat каждые 20 секунд
+                heartbeat_interval_ms=20000,  # Heartbeat каждые 20 секунд
+                max_poll_records=100,         # Максимальное количество записей за один poll
+                fetch_max_wait_ms=500,        # Максимальное время ожидания данных
+                fetch_min_bytes=1             # Минимальный размер данных для получения
             )
             logger.info(f"Консьюмер {group_id} успешно инициализирован")
         except Exception as e:
@@ -50,7 +58,7 @@ class BaseConsumer:
         """Запуск консьюмера в отдельном потоке."""
         self.running = True
         self.thread = threading.Thread(target=self._consume)
-        self.thread.daemon = True  # Поток-демон завершится вместе с основным потоком
+        self.thread.daemon = True
         self.thread.start()
         logger.info(f"Консьюмер {self.group_id} запущен")
 
@@ -59,9 +67,10 @@ class BaseConsumer:
         logger.info(f"Останавливаем консьюмер {self.group_id}")
         self.running = False
         if self.thread:
-            self.thread.join(timeout=30)  # Ждем завершения потока максимум 30 секунд
+            self.thread.join(timeout=30)
         try:
-            self.consumer.close(autocommit=True)
+            self.consumer.commit()  # Финальный коммит перед закрытием
+            self.consumer.close()
             logger.info(f"Консьюмер {self.group_id} успешно остановлен")
         except Exception as e:
             logger.error(f"Ошибка при остановке консьюмера {self.group_id}: {e}")
@@ -103,6 +112,8 @@ class SingleMessageConsumer(BaseConsumer):
                             message = Message.from_json(message_data)
                             if message:
                                 self.process_message(message)
+                                # Коммитим после успешной обработки
+                                self.consumer.commit()
                         except json.JSONDecodeError as e:
                             logger.error(f"Ошибка декодирования JSON в сообщении: {e}")
                             continue
@@ -129,10 +140,6 @@ class BatchMessageConsumer(BaseConsumer):
             topic=topic,
             group_id=f'batch_message_group_{instance_id}'
         )
-        
-        # Настройка для получения минимум 10 сообщений
-        self.consumer.config['fetch.min.bytes'] = 1024  # Минимальный размер данных
-        self.consumer.config['fetch.max.wait.ms'] = 500  # Максимальное время ожидания
 
     def process_message(self, message: Message) -> None:
         """Обработка сообщения в пакете."""
@@ -167,7 +174,7 @@ class BatchMessageConsumer(BaseConsumer):
                 if processed_messages:
                     try:
                         # Коммитим оффсеты после обработки всей пачки
-                        self.consumer.commit(async_=False)
+                        self.consumer.commit()
                         logger.info(f"BatchMessageConsumer [{self.instance_id}] успешно обработал {len(processed_messages)} сообщений")
                     except Exception as e:
                         logger.error(f"Ошибка коммита в консьюмере {self.group_id}: {e}")
